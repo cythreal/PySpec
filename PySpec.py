@@ -29,9 +29,11 @@ import os
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-mpl.use('Qt5Agg')
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+#mpl.use('Qt5Agg')
+
+
 # custom module
 import sflib
 
