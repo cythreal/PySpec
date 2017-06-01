@@ -9,6 +9,7 @@ from api import lockin as api_lia
 from gui import SharedWidgets as Shared
 from data import lwaparser
 from pyqtgraph import siFormat
+import pyqtgraph as pg
 
 
 class SelInstDialog(QtGui.QDialog):
@@ -381,18 +382,18 @@ class SynInfoDialog(QtGui.QDialog):
         # update RF setting panel
         self.rfOutputLabel.setText('ON' if self.parent.synInfo.rfToggle else 'OFF')
         self.modOutputLabel.setText('ON' if self.parent.synInfo.modToggle else 'OFF')
-        self.synFreqLabel.setText('{:.9f} MHz'.format(self.parent.synInfo.synFreqLabel * 1e-6))
+        self.synFreqLabel.setText('{:.9f} MHz'.format(self.parent.synInfo.synFreq * 1e-6))
 
         # update modulation setting panel
         self.am1StateLabel.setText('ON' if self.parent.synInfo.AM1Toggle else 'OFF')
         self.am1SrcLabel.setText(self.parent.synInfo.AM1Src)
-        self.am1DepthLabel.setText('{:.1%} ({:.0f} dB)'.format(self.parent.synInfo.AM1DepthPercent, self.parent.synInfo.AM1DepthDbm))
+        self.am1DepthLabel.setText('{:.1f}% ({:.0f} dB)'.format(self.parent.synInfo.AM1DepthPercent, self.parent.synInfo.AM1DepthDbm))
         self.am1FreqLabel.setText(siFormat(self.parent.synInfo.AM1Freq, suffix='Hz'))
         self.am1WaveLabel.setText(self.parent.synInfo.AM1Wave)
 
         self.am2StateLabel.setText('ON' if self.parent.synInfo.AM2Toggle else 'OFF')
         self.am2SrcLabel.setText(self.parent.synInfo.AM2Src)
-        self.am2DepthLabel.setText('{:.1%} ({:.0f} dB)'.format(self.parent.synInfo.AM2DepthPercent, self.parent.synInfo.AM2DepthDbm))
+        self.am2DepthLabel.setText('{:.1f}% ({:.0f} dB)'.format(self.parent.synInfo.AM2DepthPercent, self.parent.synInfo.AM2DepthDbm))
         self.am2FreqLabel.setText(siFormat(self.parent.synInfo.AM2Freq, suffix='Hz'))
         self.am2WaveLabel.setText(self.parent.synInfo.AM2Wave)
 
@@ -556,9 +557,9 @@ class LockinInfoDialog(QtGui.QDialog):
         self.instInterfaceNumLabel.setText(str(self.parent.liaInfo.instInterfaceNum))
 
         # update ref group
-        self.refSrcLabel.setText(self.parent.liaInfo.refSrc)
+        self.refSrcLabel.setText(self.parent.liaInfo.refSrcText)
         self.refFreqLabel.setText(siFormat(self.parent.liaInfo.refFreq, suffix='Hz'))
-        self.refHarmLabel.setText('{:d}'.format(self.parent.liaInfo.refHrefHarm))
+        self.refHarmLabel.setText('{:d}'.format(self.parent.liaInfo.refHarm))
         self.refPhaseLabel.setText('{:.2f} deg'.format(self.parent.liaInfo.refPhase))
 
         # update input group
@@ -594,6 +595,7 @@ class LWAParserDialog(QtGui.QDialog):
         self.setMinimumHeight(600)
         self.setWindowTitle('LWA Preview & Parser')
         self.entry_id_to_export = []
+        self.preview_win = PrevSpectrumDialog(self)
 
         self.mainLayout = QtGui.QVBoxLayout()
         self.mainLayout.setAlignment(QtCore.Qt.AlignTop)
@@ -605,19 +607,24 @@ class LWAParserDialog(QtGui.QDialog):
         if self.entry_settings:
             # set top buttons
             topButtons = QtGui.QWidget()
-            self.exportButton = QtGui.QPushButton('Export selected scans')
-            self.exportButton.clicked.connect(self.export_lwa)
+            self.exportLWAButton = QtGui.QPushButton('Export (LWA Format)')
+            self.exportLWAButton.clicked.connect(self.export_lwa)
+            self.exportXYButton = QtGui.QPushButton('Export (XY Format)')
+            self.exportXYButton.clicked.connect(self.export_xy)
             self.openFileButton = QtGui.QPushButton('Open New File')
             self.openFileButton.clicked.connect(self.open_new_file)
             topButtonLayout = QtGui.QHBoxLayout()
-            topButtonLayout.addWidget(self.exportButton)
+            topButtonLayout.addWidget(self.exportLWAButton)
+            topButtonLayout.addWidget(self.exportXYButton)
             topButtonLayout.addWidget(self.openFileButton)
             topButtons.setLayout(topButtonLayout)
             self.mainLayout.addWidget(topButtons)
 
-            # set up a QButtonGroup to manage checkboxes
-            self.entryGroup = QtGui.QButtonGroup()
-            self.entryGroup.setExclusive(False)
+            # set up QButtonGroup to manage checkboxes
+            self.previewButtonGroup = QtGui.QButtonGroup()
+            self.previewButtonGroup.setExclusive(True)
+            self.exportLWAButtonGroup = QtGui.QButtonGroup()
+            self.exportLWAButtonGroup.setExclusive(False)
             # set up the batch list area
             self.batchListWidget = QtGui.QWidget()
             batchArea = QtGui.QScrollArea()
@@ -627,81 +634,127 @@ class LWAParserDialog(QtGui.QDialog):
             self.batchLayout = QtGui.QGridLayout()
             self.batchLayout.setAlignment(QtCore.Qt.AlignTop)
             # row of names
-            self.batchLayout.addWidget(QtGui.QLabel('Scan #'), 0, 0)
-            self.batchLayout.addWidget(QtGui.QLabel('Comment'), 0, 1)
-            self.batchLayout.addWidget(QtGui.QLabel('Date'), 0, 2)
-            self.batchLayout.addWidget(QtGui.QLabel('Time'), 0, 3)
-            self.batchLayout.addWidget(QtGui.QLabel('Start Freq'), 0, 4)
-            self.batchLayout.addWidget(QtGui.QLabel('Stop Freq'), 0, 5)
-            self.batchLayout.addWidget(QtGui.QLabel('Step Freq'), 0, 6)
-            self.batchLayout.addWidget(QtGui.QLabel('Points'), 0, 7)
-            self.batchLayout.addWidget(QtGui.QLabel('Average'), 0, 8)
-            self.batchLayout.addWidget(QtGui.QLabel('Sensitivity'), 0, 9)
-            self.batchLayout.addWidget(QtGui.QLabel('Time Const'), 0, 10)
-            self.batchLayout.addWidget(QtGui.QLabel('Wait Time'), 0, 11)
-            self.batchLayout.addWidget(QtGui.QLabel('SH'), 0, 12)
-            self.batchLayout.addWidget(QtGui.QLabel('Harmonics'), 0, 13)
-            self.batchLayout.addWidget(QtGui.QLabel('Mod Freq'), 0, 14)
-            self.batchLayout.addWidget(QtGui.QLabel('Mod Amp'), 0, 15)
+            self.batchLayout.addWidget(QtGui.QLabel('Preview'), 0, 0)
+            self.batchLayout.addWidget(QtGui.QLabel('Export'), 0, 1)
+            self.batchLayout.addWidget(QtGui.QLabel('Scan #'), 0, 2)
+            self.batchLayout.addWidget(QtGui.QLabel('Comment'), 0, 3)
+            self.batchLayout.addWidget(QtGui.QLabel('Date'), 0, 4)
+            self.batchLayout.addWidget(QtGui.QLabel('Time'), 0, 5)
+            self.batchLayout.addWidget(QtGui.QLabel('Start Freq (MHz)'), 0, 6)
+            self.batchLayout.addWidget(QtGui.QLabel('Stop Freq (MHz)'), 0, 7)
+            self.batchLayout.addWidget(QtGui.QLabel('Step Freq'), 0, 8)
+            self.batchLayout.addWidget(QtGui.QLabel('Points'), 0, 9)
+            self.batchLayout.addWidget(QtGui.QLabel('Average'), 0, 10)
+            self.batchLayout.addWidget(QtGui.QLabel('Sensitivity'), 0, 11)
+            self.batchLayout.addWidget(QtGui.QLabel('Time Const'), 0, 12)
+            self.batchLayout.addWidget(QtGui.QLabel('Wait Time'), 0, 13)
+            self.batchLayout.addWidget(QtGui.QLabel('Modulation'), 0, 14)
+            self.batchLayout.addWidget(QtGui.QLabel('Harmonics'), 0, 15)
+            self.batchLayout.addWidget(QtGui.QLabel('Mod Freq'), 0, 16)
+            self.batchLayout.addWidget(QtGui.QLabel('Mod Amp'), 0, 17)
+            self.batchLayout.addWidget(QtGui.QLabel('Phase'), 0, 18)
 
             for row in range(len(self.entry_settings)):
                 current_setting = self.entry_settings[row]
                 entry = Shared.LWAScanHdEntry(self, entry_setting=current_setting)
                 # add entry number checkbox to the button group
-                self.entryGroup.addButton(entry.scanNumLabel, row)
+                self.previewButtonGroup.addButton(entry.previewCheck, row)
+                self.exportLWAButtonGroup.addButton(entry.exportCheck, row)
                 # add widgets to the dispaly panel layout
-                self.batchLayout.addWidget(entry.scanNumLabel, row+1, 0)
-                self.batchLayout.addWidget(entry.commentLabel, row+1, 1)
-                self.batchLayout.addWidget(entry.dateLabel, row+1, 2)
-                self.batchLayout.addWidget(entry.timeLabel, row+1, 3)
-                self.batchLayout.addWidget(entry.startFreqLabel, row+1, 4)
-                self.batchLayout.addWidget(entry.stopFreqLabel, row+1, 5)
-                self.batchLayout.addWidget(entry.stepLabel, row+1, 6)
-                self.batchLayout.addWidget(entry.ptsLabel, row+1, 7)
-                self.batchLayout.addWidget(entry.avgLabel, row+1, 8)
-                self.batchLayout.addWidget(entry.sensLabel, row+1, 9)
-                self.batchLayout.addWidget(entry.tcLabel, row+1, 10)
-                self.batchLayout.addWidget(entry.itLabel, row+1, 11)
-                self.batchLayout.addWidget(entry.shLabel, row+1, 12)
-                self.batchLayout.addWidget(entry.harmLabel, row+1, 13)
-                self.batchLayout.addWidget(entry.modFreqLabel, row+1, 14)
-                self.batchLayout.addWidget(entry.modAmpLabel, row+1, 15)
+                self.batchLayout.addWidget(entry.previewCheck, row+1, 0)
+                self.batchLayout.addWidget(entry.exportCheck, row+1, 1)
+                self.batchLayout.addWidget(entry.scanNumLabel, row+1, 2)
+                self.batchLayout.addWidget(entry.commentLabel, row+1, 3)
+                self.batchLayout.addWidget(entry.dateLabel, row+1, 4)
+                self.batchLayout.addWidget(entry.timeLabel, row+1, 5)
+                self.batchLayout.addWidget(entry.startFreqLabel, row+1, 6)
+                self.batchLayout.addWidget(entry.stopFreqLabel, row+1, 7)
+                self.batchLayout.addWidget(entry.stepLabel, row+1, 8)
+                self.batchLayout.addWidget(entry.ptsLabel, row+1, 9)
+                self.batchLayout.addWidget(entry.avgLabel, row+1, 10)
+                self.batchLayout.addWidget(entry.sensLabel, row+1, 11)
+                self.batchLayout.addWidget(entry.tcLabel, row+1, 12)
+                self.batchLayout.addWidget(entry.itLabel, row+1, 13)
+                self.batchLayout.addWidget(entry.modModeLabel, row+1, 14)
+                self.batchLayout.addWidget(entry.harmLabel, row+1, 15)
+                self.batchLayout.addWidget(entry.modFreqLabel, row+1, 16)
+                self.batchLayout.addWidget(entry.modAmpLabel, row+1, 17)
+                self.batchLayout.addWidget(entry.phaseLabel, row+1, 18)
 
             self.batchListWidget.setLayout(self.batchLayout)
             self.mainLayout.addWidget(batchArea)
-            self.entryGroup.buttonClicked[int].connect(self.add_to_list)
+            self.previewButtonGroup.buttonToggled.connect(self.preview_entry)
+            self.exportLWAButtonGroup.buttonClicked[int].connect(self.add_to_export_list)
         else:
             self.mainLayout.addWidget(QtGui.QLabel('Invalid file! No scans found.'))
 
         self.setLayout(self.mainLayout)
 
-    def add_to_list(self, id):
-        ''' Add checked buttons to list. id starts at 0 '''
+    def preview_entry(self):
+        ''' Preview single scan '''
 
-        if self.entryGroup.button(id).isChecked():
+        id_ = self.previewButtonGroup.checkedId()
+        preview_data = lwaparser.preview(id_, self.hd_line_num, src=self.filename)
+        self.preview_win.setData(preview_data)
+        self.preview_win.show()
+
+    def add_to_export_list(self, id_):
+        ''' Add checked buttons to export list. id_ starts at 0 '''
+
+        # if the button is checked, add to export list
+        if self.exportLWAButtonGroup.button(id_).isChecked():
             # check if id is already in the list
-            if id in self.entry_id_to_export:
+            if id_ in self.entry_id_to_export:
                 pass
             else:
-                self.entry_id_to_export.append(id)
+                self.entry_id_to_export.append(id_)
+        # if the button is unchecked, remove from export list
         else:
             # check if id is already in the list
-            if id in self.entry_id_to_export:
-                self.entry_id_to_export.remove(id)
+            if id_ in self.entry_id_to_export:
+                self.entry_id_to_export.remove(id_)
             else:
                 pass
 
     def export_lwa(self):
+        ''' Export to new lwa file '''
 
-        outputfile, _ = QtGui.QFileDialog.getSaveFileName(self, 'Save Data', '', 'SMAP File (*.lwa)')
+        # check if entry_id_to_export list is not empty
+        if self.entry_id_to_export:
+            output_file, _ = QtGui.QFileDialog.getSaveFileName(self, 'Save lwa file', '', 'SMAP File (*.lwa)')
+        else:
+            d = Shared.MsgError(self, 'Empty List!', 'No scan is selected!')
+            d.exec_()
+            output_file = None
 
         # prevent from overwriting
-        if outputfile == self.filename:
+        if output_file == self.filename:
             msg = Shared.MsgError(self, 'Cannot save!',
                              'Output file shall not overwrite source file')
             msg.exec_()
-        elif outputfile:
-            lwaparser.export(list(set(self.entry_id_to_export)), self.hd_line_num, src=self.filename, output=outputfile)
+        elif output_file:
+            lwaparser.export_lwa(list(set(self.entry_id_to_export)), self.hd_line_num, src=self.filename, output=output_file)
+        else:
+            pass
+
+    def export_xy(self):
+        ''' Export to xy text file. User can select delimiter '''
+
+        # check if entry_id_to_export list is not empty
+        if self.entry_id_to_export:
+            output_dir = QtGui.QFileDialog.getExistingDirectory(self, 'Select directory to save xy files')
+        else:
+            d = Shared.MsgError(self, 'Empty List!', 'No scan is selected!')
+            d.exec_()
+            output_dir = None
+
+        # prevent from overwriting
+        if output_dir == self.filename:
+            msg = Shared.MsgError(self, 'Cannot save!',
+                             'Output file shall not overwrite source file')
+            msg.exec_()
+        elif output_dir:
+            lwaparser.export_xy(list(set(self.entry_id_to_export)), self.hd_line_num, src=self.filename, output_dir=output_dir)
         else:
             pass
 
@@ -712,3 +765,37 @@ class LWAParserDialog(QtGui.QDialog):
         self.deleteLater()
         # launch a new dialog window
         self.parent.on_lwa_parser()
+
+    def reject(self):
+        self.preview_win.close()
+        self.preview_win.deleteLater()
+        self.close()
+        self.deleteLater()
+
+
+class PrevSpectrumDialog(QtGui.QDialog):
+    '''
+        Preview dialog window for spectrum
+    '''
+
+    def __init__(self, parent, data=None):
+        QtGui.QDialog.__init__(self, parent)
+        self.parent = parent
+        self._data = data
+        self.setWindowTitle('Spectrum Preview')
+        self.setMinimumWidth(750)
+        self.setMinimumHeight(450)
+
+        self.pgPlot = pg.PlotWidget(self, title='Spectrum Preview')
+        self.pgPlot.setLabel('left', text='Intensity', units='V')
+        self.pgPlot.setLabel('bottom', text='Frequency', units='Hz')
+        self.curve = self.pgPlot.plot()
+
+        mainLayout = QtGui.QVBoxLayout()
+        mainLayout.setAlignment(QtCore.Qt.AlignTop)
+        mainLayout.addWidget(self.pgPlot)
+        self.setLayout(mainLayout)
+
+    def setData(self, data):
+        self._data = data
+        self.curve.setData(self._data[:,0], self._data[:,1])

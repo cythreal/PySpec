@@ -197,18 +197,18 @@ def val_syn_freq(probf_text, band_index):
             band_index: int, VDI band index
         Returns
             code: int (2: safe; 1: warning; 0: fatal)
-            syn_freq: float, synthesizer frequency (MHz)
+            syn_freq: float, synthesizer frequency (Hz)
     '''
 
     try:
         probf = float(probf_text)
         syn_freq = calc_syn_freq(probf, band_index)
         if syn_freq > 0 and syn_freq < 50000:
-            return 2, syn_freq
+            return 2, syn_freq * 1e6
         else:
-            return 0, 50000
+            return 0, 5 * 1e10
     except ValueError:
-        return 0, 50000
+        return 0, 5 * 1e10
 
 
 def val_prob_freq(probf_text, band_index):
@@ -218,6 +218,9 @@ def val_prob_freq(probf_text, band_index):
             band_index: int, VDI band index
         Safe range: specified in VDIBANDRANGE (GHz)
         Warning range: [20, 50] GHz * multiplication
+        Returns
+            code: int (2: safe; 1: warning; 0: fatal)
+            syn_freq: float, synthesizer frequency (Hz)
     '''
 
     try:
@@ -227,13 +230,13 @@ def val_prob_freq(probf_text, band_index):
         if syn_freq > 20000 and syn_freq < 50000:
             # prob freq in safe_range
             if (probf > safe_range[0]*1e3) and (probf < safe_range[1]*1e3):
-                return 2, syn_freq
+                return 2, syn_freq * 1e6
             else:   # return a warning sign
-                return 1, syn_freq
+                return 1, syn_freq * 1e6
         else:
-            return 0, 50000
+            return 0, 5 * 1e10
     except ValueError:
-        return 0, 50000
+        return 0, 5 * 1e10
 
 
 def val_syn_mod_freq(freq_text, freq_unit_text):
@@ -242,6 +245,7 @@ def val_syn_mod_freq(freq_text, freq_unit_text):
             freq_text: str, modulation frequency user input
             freq_unit_text: str, modulation frequency unit
         Safe range: [0, 1e5] Hz
+        Warning range: (1e5, 16] Hz
     '''
 
     if freq_text:   # if not empty string
@@ -249,7 +253,8 @@ def val_syn_mod_freq(freq_text, freq_unit_text):
     else:
         return 0, 0
 
-    code, freq = val_float(freq_num, safe=[('>=', 0), ('<=', 1e5)])
+    code, freq = val_float(freq_num, safe=[('>=', 0), ('<=', 1e5)],
+                           warning=[('>', 1e5), ('<=', 1e6)])
     return code, freq
 
 
@@ -258,11 +263,13 @@ def val_syn_am_depth(depth_text, depth_unit_text):
         Arguments
             depth_text: str, modulation depth user input
             depth_unit_text: int, modulation depth unit
-        Safe range: [0, 75] '%'
+        Safe range: (0, 75] '%'
+        Warning range: (0, 75] '%'
     '''
 
     if depth_unit_text == '%':
-        code, depth = val_float(depth_text, safe=[('>=', 0), ('<=', 75)])
+        code, depth = val_float(depth_text, safe=[('>', 0), ('<=', 75)],
+                                warning=[('>', 0), ('<=', 75)])
         return code, depth
     else:
         return 0, 0
@@ -273,7 +280,7 @@ def val_syn_fm_depth(depth_text, depth_unit_text):
         Arguments
             depth_text: str, modulation depth user input
             depth_unit_text: int, modulation depth unit
-        Safe range: [0, 5e6] Hz for FM
+        Safe range: (0, 5e6] Hz for FM
         Warning range: (5e6, 64e6] Hz for FM (max 64 MHz)
     '''
 
@@ -282,7 +289,7 @@ def val_syn_fm_depth(depth_text, depth_unit_text):
     else:
         return 0, 0
 
-    code, depth = val_float(depth_num, safe=[('>=', 0), ('<=', 5e6)],
+    code, depth = val_float(depth_num, safe=[('>', 0), ('<=', 5e6)],
                             warning=[('>', 5e6), ('<=', 6.4e7)])
     return code, depth
 
@@ -291,10 +298,12 @@ def val_syn_lf_vol(vol_text):
     ''' Validate synthesizer LF output voltage.
         Arguments
             vol_text: str, LF voltage user input
-        Safe range: (0, 3.5)
+        Safe range: [0, 1]
+        Warning range: (1, 3.5)
     '''
 
-    code, volt = val_float(vol_text, safe=[('>', 0), ('<', 3.5)])
+    code, volt = val_float(vol_text, safe=[('>=', 0), ('<=', 1.0)],
+                           warning=[('>', 1.0), ('<', 3.5)])
     return code, volt
 
 
@@ -302,12 +311,17 @@ def val_monitor_sample_len(len_text):
     ''' Validate sample length for real-time monitor.
         Arguments
             len_text: str, samplen length user input
-        Safe range: [20, 500]
-        Warning range: > 0
+        Safe range: [20, 200]
+        Warning range: > (0, 500]
     '''
 
-    code, slen = val_int(len_text, safe=[('>=', 20), ('<=', 500)],
-                           warning=[('>', 0)])
+    code, slen = val_int(len_text, safe=[('>=', 20), ('<=', 200)],
+                         warning=[('>', 0), ('<=', 500)])
+    if slen > 500:
+        slen = 0
+    else:
+        pass
+
     return code, slen
 
 
@@ -316,20 +330,21 @@ def val_lia_monitor_srate(srate_index, tc_index):
         Arguments
             srate_index: LIA sample rate index, int
             tc_index: LIA time constant index, int
-        Safe range: > 3pi*tc
-        Warning range: > 2pi*tc
+        Safe range: > 3pi*tc + 10
+        Warning range: > 2pi*tc + 10
     '''
 
-    waittime_list = [100, 200, 500, 1000, 2000, 5000, 10000]    # milliseconds
-    waittime = waittime_list[srate_index]
     tc = LIATCLIST[tc_index]
-
-    code, waittime = val_float(waittime, safe=[('>', tc*3*pi + 10)],
-                               warning=[('>', tc*2*pi + 10)])
-    if code:
-        return code, waittime
+    if srate_index < 7: # the last index is auto
+        waittime_list = [100, 200, 500, 1000, 2000, 5000, 10000]    # milliseconds
+        waittime = waittime_list[srate_index]
+        code, waittime = val_float(waittime, safe=[('>', tc*3*pi + 10)],
+                                   warning=[('>', tc*2*pi + 10)])
     else:
-        return code, tc*3*pi
+        code = 2
+        waittime = tc*3*pi if tc*3*pi>20 else 20
+
+    return code, waittime
 
 
 def val_lia_waittime(text, tc_index):
@@ -338,8 +353,8 @@ def val_lia_waittime(text, tc_index):
         Arguments
             text: integration time user input, str
             tc_index: LIA time constant index, int
-        Safe range: > 3pi*tc
-        Warning range: > 2pi*tc
+        Safe range: > 3pi*tc + 10
+        Warning range: > 2pi*tc + 10
     '''
 
     time_const = LIATCLIST[tc_index]

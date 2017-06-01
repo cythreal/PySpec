@@ -135,8 +135,8 @@ class MainWindow(QtGui.QMainWindow):
         self.mainLayout.addWidget(self.liaCtrl, 3, 2, 2, 3)
         self.mainLayout.addWidget(self.scopeCtrl, 5, 2, 2, 3)
         self.mainLayout.addWidget(self.motorCtrl, 7, 2, 1, 3)
-        self.mainLayout.addWidget(self.scopeMonitor, 0, 5, 2, 4)
-        self.mainLayout.addWidget(self.liaMonitor, 2, 5, 4, 4)
+        self.mainLayout.addWidget(self.liaMonitor, 0, 5, 4, 4)
+        self.mainLayout.addWidget(self.scopeMonitor, 4, 5, 2, 4)
         self.mainLayout.addWidget(self.specMonitor, 6, 5, 2, 4)
 
         # Enable main window
@@ -181,7 +181,6 @@ class MainWindow(QtGui.QMainWindow):
 
         self.selInstDialog = Dialogs.SelInstDialog(self)
         self.viewInstDialog = Dialogs.ViewInstDialog(self)
-        self.closeInstDialog = Dialogs.CloseSelInstDialog(self)
         self.synInfoDialog = Dialogs.SynInfoDialog(self)
         self.liaInfoDialog = Dialogs.LockinInfoDialog(self)
 
@@ -214,7 +213,8 @@ class MainWindow(QtGui.QMainWindow):
 
     def on_close_sel_inst(self):
 
-        self.closeInstDialog.exec_()
+        d = Dialogs.CloseSelInstDialog(self)
+        d.exec_()
 
         # simply uncheck panels to prevent the warning dialog
         self.refresh_inst()

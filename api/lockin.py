@@ -15,9 +15,6 @@ TC_LIST = ['10 us', '30 us', '100 us', '300 us', '1 ms', '3 ms', '10 ms',
            '30 ms', '100 ms', '300 ms', '1 s', '3 s', '10 s', '30 s'
            ]
 
-# LOCKIN HARMONICS LIST
-HARM_LIST = ['1', '2', '3', '4']
-
 # LOCKIN COUPLE LIST
 COUPLE_LIST = ['AC', 'DC']
 
@@ -308,27 +305,27 @@ def query_single_x(liaHandle):
 def read_ref_source(liaHandle):
     ''' Read reference source
         Returns
-            text: str
+            reference source index (int)
     '''
 
     try:
         text = liaHandle.query('FMOD?')
-        return REF_SRC_LIST[int(text.strip())]
+        return int(text.strip())
     except:
-        return 'N.A.'
+        return 0
 
 
 def read_input_config(liaHandle):
     ''' Read input configuration
         Returns
-            text: str
+            input config index (int)
     '''
 
     try:
         text = liaHandle.query('ISRC?')
-        return INPUT_CONFIG_LIST[int(text.strip())]
+        return int(text.strip())
     except:
-        return 'N.A.'
+        return 0
 
 
 def read_input_grounding(liaHandle):
@@ -349,7 +346,7 @@ def set_input_grounding(liaHandle, gnd_index):
     '''
 
     try:
-        num, vcode = liaHandle.write(INPUT_GND_LIST[gnd_index])
+        num, vcode = liaHandle.write('IGND{:d}'.format(gnd_index))
         return vcode
     except:
         return 'Lockin set input grounding: IOError'
