@@ -1,3 +1,13 @@
+# Data & Document files
+*.txt
+*.csv
+*.dat
+*.html
+*.lwa
+
+# Internal config files
+*inst.cfg
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
